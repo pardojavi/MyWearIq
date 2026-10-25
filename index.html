@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>MyWearIQ · Ropa de ciclismo según el tiempo de la ruta</title>
+<meta name="description" content="Qué ropa de ciclismo ponerse según el tiempo a lo largo de toda la ruta: sensación en bici, viento, lluvia y altitud.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>MyWearIQ</h1>
+    <p class="sub">La ropa justa, mirando el tiempo de toda la ruta</p>
+  </div>
+  <button type="button" id="theme" class="ghost" aria-label="Cambiar tema">Tema</button>
+</header>
+
+<main class="cols">
+
+  <!-- ================= FORMULARIO ================= -->
+  <form class="form-col" id="form" novalidate>
+    <div class="seg" role="group" aria-label="Modo de origen">
+      <button type="button" data-mode="here">Mi ubicación</button>
+      <button type="button" data-mode="place">Elegir lugar</button>
+      <button type="button" data-mode="track" class="on">Con track</button>
+    </div>
+
+    <section id="pane-here" class="pane" hidden>
+      <button type="button" id="locate" class="wide">Obtener mi ubicación</button>
+      <p id="here-info" class="hint"></p>
+    </section>
+
+    <section id="pane-place" class="pane" hidden>
+      <label class="lbl" for="place-q">Lugar de salida</label>
+      <div class="row">
+        <input type="search" id="place-q" placeholder="Ciudad, puerto…" autocomplete="off">
+        <button type="button" id="place-go">Buscar</button>
+      </div>
+      <ul id="place-results" class="results"></ul>
+      <p id="place-info" class="hint"></p>
+    </section>
+
+    <section id="pane-track" class="pane">
+      <label class="lbl" for="gpx">Track GPX</label>
+      <input type="file" id="gpx" accept=".gpx,application/gpx+xml,application/xml,text/xml">
+      <p id="track-info" class="hint">Ningún archivo cargado.</p>
+    </section>
+
+    <div class="row2">
+      <label class="lbl" for="date">Fecha
+        <input type="date" id="date">
+      </label>
+      <label class="lbl" for="time">Hora de salida
+        <input type="time" id="time" value="08:00">
+      </label>
+    </div>
+
+    <details id="opts" open>
+      <summary>Opciones de ruta</summary>
+
+      <label class="check" id="circ-wrap"><input type="checkbox" id="circular"> Ruta circular</label>
+
+      <div id="dest-wrap">
+        <label class="lbl" for="dest-q">Destino (opcional)</label>
+        <div class="row">
+          <input type="search" id="dest-q" placeholder="¿Adónde vas?" autocomplete="off">
+          <button type="button" id="dest-go">Buscar</button>
+        </div>
+        <ul id="dest-results" class="results"></ul>
+        <p id="dest-info" class="hint"></p>
+      </div>
+
+      <div id="dur-wrap">
+        <label class="lbl" for="duration">Duración (horas)
+          <input type="number" id="duration" min="0.5" max="14" step="0.25" placeholder="3">
+        </label>
+      </div>
+
+      <label class="lbl" for="ret" id="ret-label">Hora de vuelta (opcional)</label>
+      <input type="time" id="ret">
+
+      <div id="speed-wrap">
+        <label class="lbl" for="speed">Velocidad media en llano</label>
+        <select id="speed">
+          <option value="relajada">Relajada · 20 km/h</option>
+          <option value="media" selected>Media · 25 km/h</option>
+          <option value="rapida">Rápida · 30 km/h</option>
+        </select>
+      </div>
+
+      <label class="lbl" for="sens">Sensibilidad al frío</label>
+      <select id="sens">
+        <option value="friolero">Friolero</option>
+        <option value="normal" selected>Normal</option>
+        <option value="caluroso">Caluroso</option>
+      </select>
+    </details>
+
+    <div class="btns">
+      <button type="submit" id="go" class="primary">Calcular</button>
+      <button type="button" id="demo">Ver ejemplo</button>
+    </div>
+    <p id="msg" role="status" aria-live="polite"></p>
+  </form>
+
+  <!-- ================= RESULTADOS ================= -->
+  <div class="results-col pre" id="out">
+    <p id="demo-note" class="demo-note" hidden>Ejemplo con datos simulados: no es una previsión real</p>
+
+    <p id="empty" class="welcome">
+      Elige el origen de la ruta, la fecha y pulsa <strong>Calcular</strong>.
+      Verás el recorrido coloreado por el tiempo hora a hora, las gráficas sincronizadas
+      y la ropa recomendada para cada tramo. ¿Sin track a mano? Pulsa <strong>Ver ejemplo</strong>.
+    </p>
+
+    <div id="summary" class="summary" aria-label="Resumen de la ruta"></div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" data-tab="route" class="on" role="tab">Ruta y tiempo</button>
+      <button type="button" data-tab="wear" role="tab">Ropa</button>
+    </div>
+
+    <section id="tab-route" class="tabpanel">
+      <div class="mapbar">
+        <label class="lbl-inline" for="colorby">Colorear por</label>
+        <select id="colorby">
+          <option value="feel" selected>Sensación térmica</option>
+          <option value="rain">Lluvia</option>
+          <option value="headwind">Viento de cara</option>
+        </select>
+        <div id="legend" class="legend" aria-hidden="true"></div>
+        <div id="xaxis" class="seg small" role="group" aria-label="Eje horizontal">
+          <button type="button" data-x="km" class="on">Km</button>
+          <button type="button" data-x="time">Hora</button>
+        </div>
+      </div>
+
+      <div id="map" class="map"><p class="map-fallback">El mapa no está disponible (no se ha cargado Leaflet).</p></div>
+      <p id="readout" class="readout"></p>
+
+      <div id="charts" class="charts"></div>
+      <div id="speedopts" class="speedopts"></div>
+    </section>
+
+    <section id="tab-wear" class="tabpanel" hidden></section>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>
+    Previsión: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).
+    Mapa: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a>.
+    Uso personal y no comercial. Tu ubicación y tus tracks no salen del dispositivo.
+  </p>
+</footer>
+
+<script src="vendor/leaflet.js"></script>
+<script src="src/domain.js"></script>
+<script src="src/rules.js"></script>
+<script src="src/services.js"></script>
+<script src="src/charts.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
