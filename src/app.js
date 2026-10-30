@@ -47,7 +47,7 @@
     if (t) document.documentElement.setAttribute('data-theme', t);
     else document.documentElement.removeAttribute('data-theme');
   }
-  applyTheme(readStored('mwiq:theme'));
+  applyTheme(readStored('mwiq:theme') || 'dark');
   $('theme').addEventListener('click', function () {
     var cur = document.documentElement.getAttribute('data-theme');
     var isDark = cur ? cur === 'dark'
@@ -347,8 +347,8 @@
   });
 
   /* ---------------- resumen ---------------- */
-  function card(k, val, sub) {
-    return '<div class="card"><span class="k">' + esc(k) + '</span>' +
+  function card(k, val, sub, cls) {
+    return '<div class="card' + (cls ? ' ' + cls : '') + '"><span class="k">' + esc(k) + '</span>' +
       '<span class="val">' + val + '</span>' +
       (sub ? '<span class="sub2">' + esc(sub) + '</span>' : '') + '</div>';
   }
@@ -367,7 +367,7 @@
     var f = s.feel;
     out.push(card('Sensación en bici',
       num(f.min) + '–' + num(f.max) + ' <small>°C</small>',
-      'media ' + num(f.mean) + '° · salida ' + num(f.start) + '°'));
+      'media ' + num(f.mean) + '° · salida ' + num(f.start) + '°', 'hi'));
     out.push(card('Temperatura del aire',
       num(s.air.min) + '–' + num(s.air.max) + ' <small>°C</small>'));
     out.push(card('Lluvia', num(s.rain.maxProb) + ' <small>%</small>',
