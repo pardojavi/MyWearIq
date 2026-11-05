@@ -54,7 +54,8 @@
     iceTemp: 3,              /* °C de temperatura mínima del aire */
     rainProbLow: 20,         /* % de prob. para considerar «tramo con lluvia» */
     rainWindowShare: 0.4,    /* fracción de la ruta bajo la que la lluvia es «localizada» */
-    rainWindowDelay: 30      /* min: si empieza después, el chubasquero va al bolsillo */
+    rainWindowDelay: 30,     /* min: si empieza después, el chubasquero va al bolsillo */
+    bootFeel: 6              /* sensación < este valor → cubrebotas */
   };
 
   var SENS = { friolero: -3, normal: 0, caluroso: 3 };
@@ -152,10 +153,10 @@
     }
     return -1;
   }
-  /* Prendas que cambian entre dos franjas (de la más abrigada a la de llegada) */
+  /* Prendas que cambian entre dos franjas y son extraíbles. La capa base
+     no se cuenta: nunca te quitas la camiseta interior en ruta. */
   function layerDiff(bA, bB) {
     var items = [];
-    if (bA.base && bA.base !== bB.base) items.push(bA.base);
     if (bA.extra && bA.extra !== bB.extra) items.push(bA.extra);
     if (bA.manos && bA.manos !== bB.manos) items.push(bA.manos);
     return items;
@@ -214,6 +215,20 @@
       if (startDiff >= th.coldStartDiff) partes.push('los primeros 30 min hacen ' + fmt(startDiff) + '° menos que la media');
       addReason(reasons, 'Prenda extraíble en el bolsillo porque ' + partes.join(' y ') +
         (coldAt ? '. Punto más frío: ' + coldAt + ' (' + fmt(feel.min) + '°)' : '.'));
+    }
+
+    /* 2b · mucho frío: cubrebotas cuando la sensación baja de 6° (media o mínimo en ruta) */
+    var bootMean = value < th.bootFeel;
+    var bootMin = feel.min != null && isFinite(feel.min) && (feel.min + adj) < th.bootFeel;
+    if (bootMean || bootMin) {
+      var pies0 = garments.pies || '';
+      addGarment(garments, 'pies', 'Cubrebotas');
+      if (garments.pies !== pies0) {
+        addReason(reasons, (bootMean
+          ? 'Frío en los pies con ' + fmt(value) + '° de sensación media '
+          : 'Tramos de menos de ' + th.bootFeel + '° de sensación (mínimo de ' + fmt(feel.min) + '°) ') +
+          ': cubrebotas.');
+      }
     }
 
     /* 3 · lluvia (si el tramo lluvioso es corto y llega tarde: chubasquero al bolsillo) */

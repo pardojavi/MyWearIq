@@ -84,7 +84,8 @@ tests/domain.test.js  pruebas en Node (assert), sin dependencias
    por encima de 10 °C se usa la temperatura aparente de Open-Meteo.
 5. **Ropa**: franja por **sensación media ponderada por el tiempo de paso** + sensibilidad al
    frío, con **capa base** por franja (interiores finas, térmicas o de merino), guantes por
-   niveles, **prenda extraíble**, **lluvia por tramos** (si el tramo lluvioso es corto y llega
+   niveles y **cubrebotas si la sensación baja de 6°** (aunque la media esté en otra franja),
+   **prenda extraíble**, **lluvia por tramos** (si el tramo lluvioso es corto y llega
    tarde, el chubasquero va al bolsillo con «póntelo para ese tramo»), **amplitud térmica**
    explicada (qué te quitas o te pones, cuándo y en qué km, según la franja de salida y la de
    llegada), rachas, viento de cara, descensos largos, UV, falta de luz e hielo. Cada decisión
