@@ -6,7 +6,8 @@ lluvia y altitud, con mapa y gráficas sincronizadas y una pestaña de ropa reco
 
 Aplicación **web estática**: HTML + CSS + JavaScript sin compilación ni servidor propio.
 Sin frameworks ni gestores de paquetes: la única dependencia es [Leaflet 1.9.4](https://leafletjs.com/)
-copiada en `vendor/`. Funciona en móvil (≥ 360 px) y escritorio, en tema claro y oscuro,
+copiada en `vendor/`. Funciona en móvil (≥ 360 px) y escritorio, con tema automático
+(claro/oscuro en Ajustes),
 y en español (°C, km/h, mm/h, m, km).
 
 ## Uso rápido
@@ -41,7 +42,7 @@ node --check src/services.js  # (idem src/charts.js, src/app.js, src/rules.js, s
 
 ```
 index.html            interfaz (marcado y carga de scripts, en este orden)
-styles.css            diseño con tokens CSS, tema claro/oscuro
+styles.css            diseño con tokens CSS y tipografía Inter, tema automático/claro/oscuro
 vendor/leaflet.js     Leaflet 1.9.4
 vendor/leaflet.css
 src/domain.js         lógica pura, sin DOM ni red (UMD: window.Domain)

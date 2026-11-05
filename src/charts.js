@@ -234,7 +234,7 @@
       function Y(v) { return g.t + plotH - (v - yd[0]) / (yd[1] - yd[0] || 1) * plotH; }
 
       var ink = token('--ink'), muted = token('--muted'), line = token('--line');
-      ctx.font = '11px Barlow, system-ui, sans-serif';
+      ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.textBaseline = 'middle';
 
       if (isStrip) { drawStrip(b, ctx, X, g, plotW, plotH, dom); }

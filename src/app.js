@@ -1,5 +1,6 @@
 /* MyWearIQ · app.js — estado, eventos y pintado.
-   Conecta domain.js, rules.js, services.js, charts.js y Leaflet. */
+   Conecta domain.js, rules.js, services.js, charts.js y Leaflet.
+   Dos pantallas: formulario (salida) y resultados (qué ponerme). */
 (function () {
   'use strict';
 
@@ -30,40 +31,58 @@
 
   /* ---------------- estado ---------------- */
   var st = {
-    mode: 'track',
     origin: null, dest: null, track: null, samples: null,
     series: null, stats: null, rec: null, profiles: null,
     hourlies: null,
-    departureMin: null, arrivalMin: null, windowMin: null,
-    totalKm: null, hasEle: false, up: 0, down: 0,
+    departureMin: null, arrivalMin: null, windowMin: null, arrivalGiven: null,
+    date: null, totalKm: null, hasEle: false, up: 0, down: 0,
     hasBearing: false, xMode: 'km', colorby: 'feel', cursor: 0,
     demo: false, busy: false
   };
 
-  /* ---------------- tema ---------------- */
+  /* ---------------- tema (automático por defecto) ---------------- */
   function readStored(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function writeStored(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin storage */ } }
-  function applyTheme(t) {
-    if (t) document.documentElement.setAttribute('data-theme', t);
-    else document.documentElement.removeAttribute('data-theme');
+  var THEME_KEY = 'mwiq:theme';
+  var mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  var themePref = readStored(THEME_KEY);
+  if (themePref !== 'light' && themePref !== 'dark') themePref = 'auto';
+
+  function applyTheme() {
+    if (themePref === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', themePref);
   }
-  applyTheme(readStored('mwiq:theme') || 'dark');
-  $('theme').addEventListener('click', function () {
-    var cur = document.documentElement.getAttribute('data-theme');
-    var isDark = cur ? cur === 'dark'
-      : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var next = isDark ? 'light' : 'dark';
-    applyTheme(next);
-    writeStored('mwiq:theme', next);
+  function refreshThemePressed() {
+    Array.prototype.forEach.call($('theme').querySelectorAll('[data-theme-opt]'), function (b) {
+      var on = b.getAttribute('data-theme-opt') === themePref;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.classList.toggle('on', on);
+    });
+  }
+  applyTheme();
+  refreshThemePressed();
+  $('theme').addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-theme-opt]') : null;
+    if (!b) return;
+    themePref = b.getAttribute('data-theme-opt');
+    writeStored(THEME_KEY, themePref);
+    applyTheme();
+    refreshThemePressed();
+    /* los mapas y gráficas leen los tokens CSS al pintar */
     renderMap();
     renderCharts();
   });
+  if (mediaDark && mediaDark.addEventListener) {
+    mediaDark.addEventListener('change', function () {
+      if (themePref === 'auto') { renderMap(); renderCharts(); }
+    });
+  }
 
   /* ---------------- mensajes ---------------- */
   function msg(text, kind) {
     var el = $('msg');
     el.textContent = text || '';
-    el.className = kind || '';
+    el.className = 'status' + (kind ? ' ' + kind : '');
   }
 
   /* ---------------- mapa ---------------- */
@@ -71,8 +90,8 @@
   var SCALES = {
     feel: {
       key: 'feel', name: 'Sensación térmica', unit: '°C',
-      stops: [[-5, '#2B4F9E'], [5, '#3B8FC4'], [12, '#5DB7A5'], [18, '#E0C14A'], [25, '#E8893A'], [32, '#C8452B']],
-      caps: ['-5°', '32°']
+      stops: [[-5, '#1D4E89'], [8, '#5FA8E0'], [17, '#F0B83F'], [25, '#C2410C']],
+      caps: ['-5°', '25°']
     },
     rain: {
       key: 'precip', name: 'Lluvia', unit: 'mm/h',
@@ -120,7 +139,7 @@
     layerRoute = L.layerGroup().addTo(map);
     layerMarks = L.layerGroup().addTo(map);
     map.on('click', function (e) {
-      if (st.mode !== 'place') return;
+      if (st.track) return;
       setOrigin(e.latlng.lat, e.latlng.lng, 'Punto marcado en el mapa');
     });
   }
@@ -196,9 +215,11 @@
   /* ---------------- geolocalización y búsqueda ---------------- */
   function setOrigin(lat, lon, label) {
     st.origin = { lat: lat, lon: lon, label: label };
-    var el = st.mode === 'here' ? $('here-info') : $('place-info');
-    el.textContent = label + ' · ' + num(lat, 4) + ', ' + num(lon, 4);
-    el.className = 'hint ok';
+    var txt = label + ' · ' + num(lat, 4) + ', ' + num(lon, 4);
+    $('here-info').textContent = txt;
+    $('here-info').className = 'hint ok';
+    $('place-info').textContent = txt;
+    $('place-info').className = 'hint ok';
   }
   function setDest(lat, lon, label) {
     st.dest = { lat: lat, lon: lon, label: label };
@@ -267,7 +288,8 @@
       ? ' · desnivel +' + Math.round(tr.up) + ' / −' + Math.round(tr.down) + ' m'
       : ' · sin altitud (la usará la previsión)';
     $('track-info').textContent = info;
-    $('track-info').className = 'hint ok';
+    $('track-info').className = 'sub ok';
+    $('gpx-label').textContent = name || 'Track cargado';
     return tr;
   }
   $('gpx').addEventListener('change', function () {
@@ -278,10 +300,13 @@
       try {
         loadTrackText(String(fr.result), f.name);
         msg('Track cargado.', 'ok');
+        syncOptions();
+        updateSummaryLine();
       } catch (e) {
         st.track = null;
+        $('gpx-label').textContent = 'Añadir track GPX';
         $('track-info').textContent = 'No se ha podido leer el archivo.';
-        $('track-info').className = 'hint err';
+        $('track-info').className = 'sub err';
         msg(e && e.message ? e.message : 'GPX no válido.', 'err');
       }
     };
@@ -289,32 +314,63 @@
     fr.readAsText(f);
   });
 
-  /* ---------------- modo y opciones ---------------- */
-  function setMode(mode) {
-    st.mode = mode;
-    Array.prototype.forEach.call(document.querySelectorAll('.seg [data-mode]'), function (b) {
-      b.classList.toggle('on', b.getAttribute('data-mode') === mode);
+  /* ---------------- cuándo (Hoy / Mañana / Otro) ---------------- */
+  function setDay(day) {
+    Array.prototype.forEach.call(document.querySelectorAll('#day [data-day]'), function (b) {
+      var on = b.getAttribute('data-day') === day;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.classList.toggle('on', on);
     });
-    $('pane-here').hidden = mode !== 'here';
-    $('pane-place').hidden = mode !== 'place';
-    $('pane-track').hidden = mode !== 'track';
-    syncOptions();
-    msg('');
+    $('date-wrap').hidden = day !== 'otro';
+    if (day === 'hoy') $('date').value = D.addDays(D.today(), 0);
+    else if (day === 'man') $('date').value = D.addDays(D.today(), 1);
   }
-  Array.prototype.forEach.call(document.querySelectorAll('.seg [data-mode]'), function (b) {
-    b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
+  Array.prototype.forEach.call(document.querySelectorAll('#day [data-day]'), function (b) {
+    b.addEventListener('click', function () {
+      setDay(b.getAttribute('data-day'));
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#dur-chips [data-dur]'), function (b) {
+    b.addEventListener('click', function () {
+      setDurChip(b.getAttribute('data-dur'));
+    });
+  });
+  function setDurChip(h) {
+    Array.prototype.forEach.call(document.querySelectorAll('#dur-chips [data-dur]'), function (b) {
+      var on = b.getAttribute('data-dur') === h;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.classList.toggle('on', on);
+    });
+    $('dur-more').hidden = h !== '5';
+    $('duration').value = h === '5' ? '' : h;
+  }
+  /* escribir la fecha a mano fuerza «Otro» */
+  $('date').addEventListener('input', function () { setDay('otro'); });
+
+  /* ---------------- desplegable de cambio de salida ---------------- */
+  $('place-toggle').addEventListener('click', function () {
+    var pane = $('pane-place');
+    var open = pane.hidden;
+    pane.hidden = !open;
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    this.textContent = open ? 'Cerrar' : 'Cambiar';
+    if (open) $('place-q').focus();
   });
 
+  /* ---------------- opciones (dependen del track, no de un modo) ---------------- */
   function syncOptions() {
-    var track = st.mode === 'track';
+    var track = !!st.track;
     var circ = $('circular').checked;
     var showRoute = !track && !circ;
     $('dest-wrap').hidden = !showRoute;
-    $('dur-wrap').hidden = !showRoute;
+    $('dur-wrap').hidden = track;
     $('speed-wrap').hidden = !track;
     $('ret-label').textContent = track ? 'Hora de llegada (opcional)' : 'Hora de vuelta (opcional)';
   }
-  $('circular').addEventListener('change', syncOptions);
+  $('circular').addEventListener('change', function () {
+    syncOptions();
+    updateSummaryLine();
+  });
 
   /* ---------------- pestañas ---------------- */
   Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (b) {
@@ -322,6 +378,7 @@
       Array.prototype.forEach.call(document.querySelectorAll('.tabs [data-tab]'), function (x) {
         x.classList.toggle('on', x === b);
         x.setAttribute('aria-selected', x === b ? 'true' : 'false');
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
       });
       var wear = b.getAttribute('data-tab') === 'wear';
       $('tab-route').hidden = wear;
@@ -336,6 +393,7 @@
       st.xMode = b.getAttribute('data-x');
       Array.prototype.forEach.call($('xaxis').querySelectorAll('[data-x]'), function (x) {
         x.classList.toggle('on', x === b);
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
       });
       renderCharts();
       renderReadout();
@@ -346,38 +404,93 @@
     renderMap();
   });
 
-  /* ---------------- resumen ---------------- */
-  function card(k, val, sub, cls) {
-    return '<div class="card' + (cls ? ' ' + cls : '') + '"><span class="k">' + esc(k) + '</span>' +
-      '<span class="val">' + val + '</span>' +
-      (sub ? '<span class="sub2">' + esc(sub) + '</span>' : '') + '</div>';
-  }
-  function renderSummary() {
-    var s = st.stats, out = [];
-    if (st.totalKm != null) {
-      out.push(card('Distancia', num(st.totalKm, 1) + ' <small>km</small>',
-        'llegada ' + D.hhmm(s.arrivalMin)));
+  /* ---------------- tarjeta principal ---------------- */
+  function renderHero() {
+    var s = st.stats;
+    if (!s) return;
+    $('hero-label').textContent = st.demo
+      ? 'Ejemplo con datos simulados: no es una previsión real'
+      : 'Previsión en ruta';
+    $('hero-temp-num').textContent = (s.air.min != null && s.air.max != null)
+      ? num(s.air.min) + '–' + num(s.air.max) : '—';
+
+    var feelTxt = 'Sensación en bici ';
+    if (s.feel.min != null) feelTxt += '<strong>' + num(s.feel.min) + '–' + num(s.feel.max) + '</strong>°';
+
+    var windTxt = 'Viento ';
+    var gust = s.gustMax != null && isFinite(s.gustMax) ? num(s.gustMax) : null;
+    if (s.headwindMean != null) {
+      windTxt += 'de cara ' + num(Math.max(0, s.headwindMean)) + ' km/h' +
+        (gust ? ' · rachas ' : ' km/h') + (gust && s.headwindMean != null ? gust + ' km/h' : '');
+    } else if (gust) {
+      windTxt += '· rachas de ' + gust + ' km/h';
     } else {
-      out.push(card('Duración', durShort(s.durationMin),
-        'hasta las ' + D.hhmm(s.arrivalMin)));
+      windTxt = 'Viento sin datos';
     }
+    var rainTxt = (s.rain.maxProb != null && s.rain.maxProb >= 20)
+      ? 'Lluvia ' + num(s.rain.maxProb) + ' %'
+      : 'Sin lluvia';
+
+    $('hero-info').innerHTML =
+      '<p class="hero-line">' + feelTxt + '</p>' +
+      '<p class="hero-line">' + windTxt + ' · ' + rainTxt + '</p>';
+  }
+
+  /* ---------------- pestaña Ruta · datos del recorrido ---------------- */
+  function renderRouteInfo() {
+    var s = st.stats, parts = [];
+    if (st.totalKm != null) parts.push(num(st.totalKm, 1) + ' km');
+    else parts.push('duración ' + durShort(s.durationMin));
     if (st.hasEle) {
-      out.push(card('Desnivel', '+' + Math.round(st.up) + ' / −' + Math.round(st.down) + ' <small>m</small>'));
+      parts.push('desnivel +' + Math.round(st.up) + ' / −' + Math.round(st.down) + ' m');
     }
-    var f = s.feel;
-    out.push(card('Sensación en bici',
-      num(f.min) + '–' + num(f.max) + ' <small>°C</small>',
-      'media ' + num(f.mean) + '° · salida ' + num(f.start) + '°', 'hi'));
-    out.push(card('Temperatura del aire',
-      num(s.air.min) + '–' + num(s.air.max) + ' <small>°C</small>'));
-    out.push(card('Lluvia', num(s.rain.maxProb) + ' <small>%</small>',
-      'máx. ' + num(s.rain.maxPrecip, 1) + ' mm/h'));
-    var viento = num(s.gustMax) + ' <small>km/h</small>';
-    var sub = s.headwindMean != null
-      ? 'de cara ' + num(s.headwindMean) + ' km/h medio'
-      : 'rachas máximas';
-    out.push(card('Viento', viento, sub));
-    $('summary').innerHTML = out.join('');
+    if (!st.track && !$('circular').checked && st.dest) parts.push('hasta ' + st.dest.label);
+    if (!st.track && $('circular').checked) parts.push('ida y vuelta');
+    parts.push('llegada ' + D.hhmm(s.arrivalMin));
+    $('route-info').textContent = parts.join(' · ');
+  }
+
+  /* ---------------- tramos hora a hora ---------------- */
+  function nearestIdx(tTargets, t) {
+    var best = 0, bestD = Infinity;
+    tTargets.forEach(function (s, i) {
+      var d = Math.abs(s - t);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+  function renderSegments() {
+    var el = $('segments');
+    if (!st.series) { el.innerHTML = ''; return; }
+    var ser = st.series, s = st.stats;
+    if (!ser.length) { el.innerHTML = ''; return; }
+    var dep = st.departureMin;
+    var maxT = s.durationMin;
+    var times = ser.map(function (p) { return p.t; });
+    var seen = {};
+    var html = '<h3>Tramos hora a hora</h3>';
+    function rowAt(idx, label) {
+      var p = ser[idx];
+      var d = [];
+      if (p.dist != null) d.push('km ' + num(p.dist, 1));
+      if (p.wind != null && isFinite(p.wind)) d.push('viento ' + num(p.wind) + ' km/h');
+      if (p.precip != null && isFinite(p.precip) && p.precip > 0) d.push('lluvia ' + num(p.precip, 1) + ' mm');
+      var c = scaleColor(SCALES.feel, p.feel);
+      return '<div class="srow"><i style="background:' + c + '" aria-hidden="true"></i>' +
+        '<span class="t">' + esc(label) + '</span>' +
+        '<span class="d">' + esc(d.join(' · ') || '—') + '</span>' +
+        '<span class="temp">' + (p.temp != null ? num(p.temp) + '°' : '—') + '</span></div>';
+    }
+    function pushRow(tm, forceLabel) {
+      var idx = nearestIdx(times, tm);
+      if (seen[idx]) return;
+      seen[idx] = 1;
+      html += rowAt(idx, forceLabel || D.hhmm(dep + tm));
+    }
+    pushRow(0);
+    for (var h = 1; h <= Math.ceil(maxT / 60); h++) pushRow(Math.min(h * 60, maxT));
+    pushRow(maxT, D.hhmm(s.arrivalMin)); /* la última fila es la llegada */
+    el.innerHTML = html;
   }
 
   /* ---------------- lectura del cursor ---------------- */
@@ -432,7 +545,7 @@
   /* ---------------- tarjetas de velocidad ---------------- */
   function renderSpeedopts() {
     var el = $('speedopts');
-    if (st.mode !== 'track' || st.arrivalMin != null || !st.profiles) { el.innerHTML = ''; return; }
+    if (!st.track || st.arrivalMin != null || !st.profiles) { el.innerHTML = ''; return; }
     var cur = $('speed').value;
     var html = '<h3>Elige tu velocidad media</h3>';
     st.profiles.forEach(function (p) {
@@ -456,61 +569,95 @@
   function renderWear() {
     var rec = st.rec, s = st.stats;
     if (!rec) { $('tab-wear').innerHTML = ''; return; }
-    var zones = [['cabeza', 'Cabeza'], ['torso', 'Torso'], ['manos', 'Manos'],
-      ['piernas', 'Piernas'], ['pies', 'Pies']];
-    var html = '<div class="wear">';
-    html += '<div class="wear-head"><div class="band">' + esc(rec.band) + '</div>' +
-      '<div class="band-sub">Sensación media de ' + num(s.feel.mean) + '° · de ' +
-      num(s.feel.min) + '° a ' + num(s.feel.max) + '° · sensibilidad ' +
-      esc($('sens').value) + '</div></div>';
+    var zones = [['torso', 'Torso'], ['piernas', 'Piernas'], ['manos', 'Manos'],
+      ['cabeza', 'Cabeza'], ['pies', 'Pies']];
+    var html = '<p class="kicker">Franja «' + esc(rec.band) + '» · sensibilidad ' +
+      esc($('sens').value) + '</p>';
 
-    html += '<section><h3>Qué ponerte</h3><div class="zones">';
+    /* fila por zona + Extra (bolsillo) */
+    html += '<div class="wearlist card">';
     zones.forEach(function (z) {
       var v = rec.garments[z[0]];
-      html += '<div class="zone"><span class="k">' + esc(z[1]) + '</span>' +
+      html += '<div class="wrow"><span class="k">' + esc(z[1]) + '</span>' +
         '<span class="v' + (v ? '' : ' none') + '">' + esc(v || '—') + '</span></div>';
     });
-    html += '</div></section>';
-
-    if (rec.pocket.length) {
-      html += '<section class="panel pocket"><h3>Llevar en el bolsillo</h3><ul>' +
-        rec.pocket.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></section>';
-    }
-    if (rec.warnings.length) {
-      html += '<section class="panel warn"><h3>Avisos</h3><ul>' +
-        rec.warnings.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></section>';
-    }
-    html += '<section class="panel why"><h3>Por qué</h3><ul>' +
-      rec.reasons.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></section>';
-
-    var coldest = bandIndexOf(s.feel.min);
-    html += '<section><h3>Franjas</h3><div class="ladder">' +
-      R.bands.map(function (b, i) {
-        var cls = i === rec.bandIndex ? ' on'
-          : (i >= rec.bandIndex && i <= coldest ? ' reached' : '');
-        return '<span class="' + cls.trim() + '">' + esc(b.name) + '</span>';
-      }).join('') + '</div></section>';
+    html += '<div class="wrow"><span class="k">Extra</span>' +
+      '<span class="v' + (rec.pocket.length ? '' : ' none') + '">' +
+      (rec.pocket.length ? esc(rec.pocket.join(' · ')) : '—') + '</span></div>';
     html += '</div>';
+
+    /* durante la ruta: prenda extraíble + avisos */
+    var during = rec.reasons.filter(function (r) {
+      return /^Prenda extraíble/i.test(r);
+    }).concat(rec.warnings);
+    html += '<div class="textcard during card"><span class="k">Durante la ruta</span>';
+    if (during.length) {
+      html += '<ul>' + during.map(function (p) {
+        return '<li>' + esc(p) + '</li>';
+      }).join('') + '</ul>';
+    } else {
+      html += '<p class="muted">Sin cambios relevantes previstos en ruta.</p>';
+    }
+    html += '</div>';
+
+    /* por qué (plegable) */
+    if (rec.reasons.length) {
+      html += '<details class="textcard why card"><summary>Por qué</summary>' +
+        '<div class="whylist"><ul>' + rec.reasons.map(function (p) {
+          return '<li>' + esc(p) + '</li>';
+        }).join('') + '</ul></div></details>';
+    }
     $('tab-wear').innerHTML = html;
   }
-  function bandIndexOf(feel) {
-    if (feel == null) return 0;
-    return R.bandIndexFor(feel + adjOf($('sens').value));
-  }
-  function adjOf(sens) { return R.sens[sens] != null ? R.sens[sens] : 0; }
 
   /* ---------------- pintado general ---------------- */
-  function renderAll() {
+  function showResults() {
+    document.body.classList.add('show-results');
     $('out').classList.remove('pre');
     $('empty').hidden = true;
-    $('demo-note').hidden = !st.demo;
-    renderSummary();
+  }
+  function renderAll() {
+    showResults();
+    renderHero();
+    updateResSummary();
+    renderRouteInfo();
     renderMap();
     renderCharts();
     renderReadout();
     renderSpeedopts();
     renderWear();
+    renderSegments();
     setCursor(st.cursor);
+  }
+
+  /* ---------------- resumen de la barra superior ---------------- */
+  var WD = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  var MO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fmtDateShort(dateStr) {
+    var diff = D.daysBetween(D.today(), dateStr);
+    if (diff === 0) return 'Hoy';
+    if (diff === 1) return 'Mañana';
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr == null ? '' : dateStr));
+    if (!m) return '';
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return WD[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MO[d.getUTCMonth()];
+  }
+  function updateResSummary() {
+    if (st.departureMin == null) { $('res-summary').textContent = ''; return; }
+    var parts = [fmtDateShort(st.date), D.hhmm(st.departureMin)];
+    if (st.totalKm != null) parts.push(num(st.totalKm, 1) + ' km');
+    else parts.push(durShort(st.stats.durationMin));
+    $('res-summary').textContent = parts.join(' · ');
+  }
+
+  /* ---------------- línea resumen de ajustes ---------------- */
+  function updateSummaryLine() {
+    var parts = ['Ajustes', 'Ritmo ' + num(D.V_FLAT[$('speed').value] || 25) + ' km/h'];
+    var sv = $('sens').value;
+    parts.push('Frío ' + sv);
+    if (!st.track && $('circular').checked) parts.push('Ruta circular');
+    if (st.track) parts.push('Track ' + num(st.track.totalKm, 1) + ' km');
+    $('settings-summary').textContent = parts.join(' · ');
   }
 
   /* ---------------- validación ---------------- */
@@ -521,9 +668,7 @@
     if (!(diff >= 0 && diff <= 15)) {
       return { err: 'La previsión cubre desde hoy hasta 15 días. Elige una fecha dentro de ese margen.' };
     }
-    if (st.mode === 'track' && !st.track) return { err: 'Carga primero un track en formato GPX.' };
-    if (st.mode === 'here' && !st.origin) return { err: 'Pulsa «Obtener mi ubicación» o elige un lugar.' };
-    if (st.mode === 'place' && !st.origin) return { err: 'Busca un lugar de salida o toca un punto del mapa.' };
+    if (!st.track && !st.origin) return { err: 'Pulsa «Mi ubicación» o elige un lugar.' };
     return { date: date, dep: D.toMin(date + 'T' + time) };
   }
 
@@ -532,7 +677,7 @@
   function buildSamples(dep, windowMin) {
     var vFlat = vFlatOf();
     st.hasEle = false; st.up = 0; st.down = 0;
-    if (st.mode === 'track') {
+    if (st.track) {
       var samples = D.sampleTrack(st.track);
       st.totalKm = st.track.totalKm;
       st.hasEle = st.track.hasEle;
@@ -581,7 +726,7 @@
       totalKm: st.totalKm, hasEle: st.hasEle, up: st.up, down: st.down
     });
     st.rec = R.recommend(st.stats, st.series, { sens: $('sens').value });
-    st.profiles = st.mode === 'track' ? D.speedProfiles(samples, st.departureMin) : null;
+    st.profiles = st.track ? D.speedProfiles(samples, st.departureMin) : null;
 
     /* eje horizontal */
     var hasKm = st.totalKm != null;
@@ -589,6 +734,7 @@
     st.xMode = hasKm ? 'km' : 'time';
     Array.prototype.forEach.call($('xaxis').querySelectorAll('[data-x]'), function (x) {
       x.classList.toggle('on', x.getAttribute('data-x') === st.xMode);
+      x.setAttribute('aria-pressed', x.getAttribute('data-x') === st.xMode ? 'true' : 'false');
     });
     /* viento de cara solo con rumbo */
     $('colorby').querySelector('option[value="headwind"]').disabled = !st.hasBearing;
@@ -610,7 +756,7 @@
       totalKm: st.totalKm, hasEle: st.hasEle, up: st.up, down: st.down
     });
     st.rec = R.recommend(st.stats, st.series, { sens: $('sens').value });
-    st.profiles = st.mode === 'track' ? D.speedProfiles(samples, st.departureMin) : null;
+    st.profiles = st.track ? D.speedProfiles(samples, st.departureMin) : null;
     renderAll();
   }
 
@@ -634,6 +780,7 @@
     msg('Calculando…', 'ok');
 
     st.departureMin = v.dep;
+    st.date = v.date;
     var rawRet = $('ret').value ? D.toMin(v.date + 'T' + $('ret').value) : null;
     st.arrivalGiven = rawRet != null;
     st.windowMin = D.resolveWindow(v.dep, rawRet, parseFloat($('duration').value) || null);
@@ -660,7 +807,7 @@
 
     prepare.then(function (hourlies) {
       /* Track sin altitud: la aporta la previsión y cambian los tiempos */
-      if (st.mode === 'track' && !st.hasEle) {
+      if (st.track && !st.hasEle) {
         samples.forEach(function (s, i) {
           var H = hourlies.length === samples.length ? hourlies[i] : hourlies[0];
           if (s.ele == null && H.elevation != null) s.ele = H.elevation;
@@ -673,7 +820,7 @@
         });
       }
       finishCalculation(samples, hourlies);
-      msg(st.demo ? '' : '', 'ok');
+      msg('');
     }).catch(function (e) {
       msg(e && e.message ? e.message : 'Error inesperado al calcular.', 'err');
     }).then(function () {
@@ -685,14 +832,12 @@
   /* ---------------- ejemplo con datos simulados ---------------- */
   function runDemo() {
     st.demo = true;
-    setMode('track');
+    setDay('man');
+    $('time').value = '08:30';
     $('circular').checked = false;
     $('ret').value = '';
-    $('duration').value = '';
     $('speed').value = 'media';
     $('sens').value = 'normal';
-    $('date').value = D.addDays(D.today(), 1);
-    $('time').value = '08:30';
     st.dest = null;
     st.origin = null;
     try {
@@ -703,17 +848,40 @@
       return;
     }
     syncOptions();
+    updateSummaryLine();
     calculate();
   }
 
+  /* ---------------- Ajustes (hoja / panel) ---------------- */
+  function openSettings() { $('settings').hidden = false; }
+  function closeSettings() { $('settings').hidden = true; }
+  $('settings-btn').addEventListener('click', openSettings);
+  $('settings-summary').addEventListener('click', openSettings);
+  $('settings-close').addEventListener('click', closeSettings);
+  $('settings-backdrop').addEventListener('click', closeSettings);
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('settings').hidden) closeSettings();
+  });
+
+  /* ---------------- volver a la pantalla 1 ---------------- */
+  $('back').addEventListener('click', function () {
+    document.body.classList.remove('show-results');
+    window.scrollTo(0, 0);
+  });
+
+  /* ---------------- eventos del formulario ---------------- */
   $('form').addEventListener('submit', function (ev) {
     ev.preventDefault();
     st.demo = false;
     calculate();
   });
   $('demo').addEventListener('click', runDemo);
-  $('speed').addEventListener('change', function () { recalcWithSpeed(this.value); });
+  $('speed').addEventListener('change', function () {
+    updateSummaryLine();
+    recalcWithSpeed(this.value);
+  });
   $('sens').addEventListener('change', function () {
+    updateSummaryLine();
     if (st.series) {
       st.rec = R.recommend(st.stats, st.series, { sens: this.value });
       renderWear();
@@ -721,7 +889,10 @@
   });
 
   /* ---------------- arranque ---------------- */
-  setMode('track');
-  $('date').value = D.addDays(D.today(), 1);
+  setDay('man');
+  setDurChip('3');
+  $('time').value = '08:00';
+  syncOptions();
+  updateSummaryLine();
   initMap();
 })();
