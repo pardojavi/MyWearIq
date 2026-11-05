@@ -34,7 +34,7 @@ y abre <http://localhost:8000/index.html>.
 ### Pruebas
 
 ```bash
-node tests/domain.test.js     # → «14 pruebas superadas»
+node tests/domain.test.js     # → «15 pruebas superadas»
 node --check src/services.js  # (idem src/charts.js, src/app.js, src/rules.js, src/domain.js)
 ```
 
@@ -82,9 +82,16 @@ tests/domain.test.js  pruebas en Node (assert), sin dependencias
 4. **Sensación en bici**: componente de viento según rumbo y sensación por viento
    (Environment Canada/NWS) con `v = velocidadCiclista + vientoEnContra`;
    por encima de 10 °C se usa la temperatura aparente de Open-Meteo.
-5. **Ropa**: franja por sensación media + sensibilidad al frío, más prenda extraíble, lluvia,
-   rachas, viento de cara, descensos largos, UV, falta de luz e hielo. Cada decisión se
-   explica en «Por qué» con su hora y kilómetro.
+5. **Ropa**: franja por **sensación media ponderada por el tiempo de paso** + sensibilidad al
+   frío, con **capa base** por franja (interiores finas, térmicas o de merino), guantes por
+   niveles, **prenda extraíble**, **lluvia por tramos** (si el tramo lluvioso es corto y llega
+   tarde, el chubasquero va al bolsillo con «póntelo para ese tramo»), **amplitud térmica**
+   explicada (qué te quitas o te pones, cuándo y en qué km, según la franja de salida y la de
+   llegada), rachas, viento de cara, descensos largos, UV, falta de luz e hielo. Cada decisión
+   se explica en «Por qué» con su hora y kilómetro.
+   El botón **«Ver otras combinaciones»** abre un popup con hasta 3 alternativas coherentes:
+   abrigarte al salir y quitarte por el camino, capas del principio encima de la ropa del
+   final, o salir templado y llevar lo frío en el bolsillo.
 
 Todos los umbrales, las velocidades y los textos de ropa viven en `src/rules.js` como datos
 editables; **no se cambian sin avisar al usuario**.

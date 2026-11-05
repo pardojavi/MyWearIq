@@ -531,7 +531,7 @@
         var warm = clamp((hr - 6) / 7, 0, 1) * (hr > 16 ? Math.max(0, 1 - (hr - 16) / 6) : 1);
         var T = 5 + 11 * warm - 6.5 * (ele / 1000);
         var app = T - 1.5 + (warm > 0.5 ? 2 : 0);
-        var lluvia = (hr >= 11 && hr <= 13) && ele > 250;
+        var lluvia = (hr === 12) && ele > 250;
         H.times.push(base + k * 60);
         H.temperature_2m.push(round1(T));
         H.apparent_temperature.push(round1(app));

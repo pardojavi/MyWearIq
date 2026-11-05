@@ -233,6 +233,23 @@
   </div>
 </div>
 
+<!-- ============ Otras combinaciones (popup) ============ -->
+<div id="alts" class="sheet" hidden>
+  <div id="alts-backdrop" class="backdrop"></div>
+  <div id="alts-panel" class="sheetpanel" role="dialog" aria-modal="true" aria-label="Otras combinaciones de ropa">
+    <header class="sheethead">
+      <span class="sheettitle">Otras combinaciones</span>
+      <button type="button" id="alts-close" class="iconbtn" aria-label="Cerrar combinaciones">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </header>
+    <p class="altintro">Combinaciones coherentes con la temperatura de la ruta. Que salga frío y caliente no es un problema si sabes qué quitarte (o llevarte) y cuándo.</p>
+    <div id="alts-list"></div>
+  </div>
+</div>
+
 <script src="vendor/leaflet.js"></script>
 <script src="src/domain.js"></script>
 <script src="src/rules.js"></script>

@@ -569,7 +569,7 @@
   function renderWear() {
     var rec = st.rec, s = st.stats;
     if (!rec) { $('tab-wear').innerHTML = ''; return; }
-    var zones = [['torso', 'Torso'], ['piernas', 'Piernas'], ['manos', 'Manos'],
+    var zones = [['torso', 'Torso'], ['base', 'Capa base'], ['piernas', 'Piernas'], ['manos', 'Manos'],
       ['cabeza', 'Cabeza'], ['pies', 'Pies']];
     var html = '<p class="kicker">Franja «' + esc(rec.band) + '» · sensibilidad ' +
       esc($('sens').value) + '</p>';
@@ -586,9 +586,9 @@
       (rec.pocket.length ? esc(rec.pocket.join(' · ')) : '—') + '</span></div>';
     html += '</div>';
 
-    /* durante la ruta: prenda extraíble + avisos */
+    /* durante la ruta: extraíbles, amplitud térmica y lluvia por tramos */
     var during = rec.reasons.filter(function (r) {
-      return /^Prenda extraíble/i.test(r);
+      return /^(Prenda extraíble|Amplitud|Lluvia localizada)/i.test(r);
     }).concat(rec.warnings);
     html += '<div class="textcard during card"><span class="k">Durante la ruta</span>';
     if (during.length) {
@@ -607,8 +607,42 @@
           return '<li>' + esc(p) + '</li>';
         }).join('') + '</ul></div></details>';
     }
+    html += '<button type="button" id="wear-alt">Ver otras combinaciones</button>';
     $('tab-wear').innerHTML = html;
+    $('wear-alt').addEventListener('click', openAlts);
   }
+
+  /* ---------------- otras combinaciones (popup) ---------------- */
+  function altCard(a) {
+    var zones = [['torso', 'Torso'], ['base', 'Capa base'], ['piernas', 'Piernas'], ['manos', 'Manos'],
+      ['cabeza', 'Cabeza'], ['pies', 'Pies']];
+    var rows = zones.map(function (z) {
+      var v = a.garments[z[0]];
+      return '<div class="wrow"><span class="k">' + esc(z[1]) + '</span>' +
+        '<span class="v' + (v ? '' : ' none') + '">' + esc(v || '—') + '</span></div>';
+    }).join('');
+    var rem = (a.quitar || []).length
+      ? '<p class="altnote"><strong>Quitar en ruta</strong>: ' + esc(a.quitar.join(' · ')) +
+        (a.when ? ' (a partir de ' + esc(a.when) + ')' : '') + '.</p>'
+      : '';
+    var keep = (a.guardar || []).length
+      ? '<p class="altnote"><strong>Llevar en el bolsillo</strong>: ' + esc(a.guardar.join(' · ')) +
+        (a.when ? ' (te los pones a partir de ' + esc(a.when) + ')' : '') + '.</p>'
+      : '';
+    return '<div class="card textpad altcard"><h4>' + esc(a.title) + '</h4>' +
+      '<div class="wearlist">' + rows + '</div>' + rem + keep +
+      '<p class="altwhy">' + esc(a.why) + '</p></div>';
+  }
+  function openAlts() {
+    if (!st.stats || !st.series) return;
+    var alts = R.alternatives(st.stats, st.series, { sens: $('sens').value });
+    var el = $('alts-list');
+    el.innerHTML = alts.length
+      ? alts.map(function (a) { return altCard(a); }).join('')
+      : '<p class="altintro">No hay combinaciones alternativas razonables para esta ruta.</p>';
+    $('alts').hidden = false;
+  }
+  function closeAlts() { $('alts').hidden = true; }
 
   /* ---------------- pintado general ---------------- */
   function showResults() {
@@ -860,7 +894,10 @@
   $('settings-close').addEventListener('click', closeSettings);
   $('settings-backdrop').addEventListener('click', closeSettings);
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && !$('settings').hidden) closeSettings();
+    if (ev.key === 'Escape') {
+      if (!$('settings').hidden) closeSettings();
+      if (!$('alts').hidden) closeAlts();
+    }
   });
 
   /* ---------------- volver a la pantalla 1 ---------------- */

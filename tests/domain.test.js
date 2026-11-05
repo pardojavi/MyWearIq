@@ -271,4 +271,32 @@ test(14, 'Calor (28 °C, UV 7) → franja Calor, crema solar, sin extraíble', f
   assert.strictEqual(rec.pocket.length, 0, 'sin prenda extraíble: ' + JSON.stringify(rec.pocket));
 });
 
+/* 15 · Amplitud térmica, lluvia localizada y alternativas */
+test(15, 'Amplitud térmica, capa base, lluvia localizada y alternativas', function () {
+  /* salida 4°, media ~10°, final 17°; chubasco solo del min 90 al 150 */
+  var feels = [4, 4.5, 5, 6, 7, 9, 11, 13, 15, 16.5];
+  var series = feels.map(function (f, i) {
+    var rainy = i >= 9 && i <= 14;
+    return mk(i, { t: i * 10, feel: f, temp: f + 1, precip: rainy ? 1.2 : 0, prob: rainy ? 75 : 10 });
+  });
+  var stats = statsOf(series);
+  var rec = R.recommend(stats, series, { sens: 'normal' });
+
+  assert.ok(rec.garments.base, 'capa base asignada: ' + JSON.stringify(rec.garments));
+  var why = rec.reasons.join(' | ');
+  assert.ok(/Amplitud térmica/.test(why), 'explica amplitud: ' + why);
+  assert.ok(/quítate/.test(why), 'dice qué quitarse: ' + why);
+  assert.ok(/Lluvia localizada entre las/.test(why), 'lluvia por tramos: ' + why);
+  assert.ok(rec.pocket.indexOf('Chubasquero') >= 0, 'chubasquero en el bolsillo: ' + JSON.stringify(rec.pocket));
+  assert.ok(rec.garments.torso.indexOf('Chubasquero') < 0, 'chubasquero no puesto de inicio');
+
+  var alts = R.alternatives(stats, series, { sens: 'normal' });
+  assert.ok(alts.length >= 2 && alts.length <= 3, 'entre 2 y 3 alternativas: ' + alts.length);
+  alts.forEach(function (a) {
+    assert.ok(a.title && a.why, 'alternativa completa: ' + a.title);
+    assert.ok(a.garments && 'torso' in a.garments, 'garments por zona: ' + a.title);
+  });
+  assert.ok(/Abrigarte al salir/.test(alts[0].title), 'primera: abrigarse al salir');
+});
+
 console.log(passed + ' pruebas superadas');

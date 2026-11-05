@@ -302,6 +302,25 @@ details.textcard summary {
 details.textcard[open] summary { color: var(--ink); }
 details.textcard .whylist { color: var(--muted); font-size: 14px; }
 
+/* ver otras combinaciones */
+#wear-alt {
+  width: 100%; min-height: 44px;
+  margin-top: 10px;
+  background: var(--sunken); color: var(--ink);
+  border-radius: 12px; font-weight: 600;
+}
+#wear-alt:hover { background: var(--line); }
+.altintro { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.altcard { margin-bottom: 10px; }
+.altcard h4 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+.altcard .wrow { padding: 7px 0; }
+.altnote, .altwhy {
+  margin: 8px 0 0; font-size: 13px; color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.altnote strong { color: var(--ink); font-weight: 600; }
+.altwhy { padding-top: 6px; border-top: 1px solid var(--line); }
+
 /* --- Ruta --- */
 .route-card { padding: 14px 18px; }
 .route-nfo { margin: 2px 0 10px; font-size: 13px; color: var(--muted); }
