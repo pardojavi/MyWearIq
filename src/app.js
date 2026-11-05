@@ -893,6 +893,8 @@
   $('settings-summary').addEventListener('click', openSettings);
   $('settings-close').addEventListener('click', closeSettings);
   $('settings-backdrop').addEventListener('click', closeSettings);
+  $('alts-close').addEventListener('click', closeAlts);
+  $('alts-backdrop').addEventListener('click', closeAlts);
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape') {
       if (!$('settings').hidden) closeSettings();
